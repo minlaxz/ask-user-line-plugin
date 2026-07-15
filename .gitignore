@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Secrets / local config — never commit
+.env
+*.env
+.hermes/
+
+# Editor / OS / AI sessions
+.vscode/
+.idea/
+.DS_Store
+.claude/
