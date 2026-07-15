@@ -4,19 +4,20 @@ question and yield the turn, over the OpenAI Responses API.
 On `/v1/responses` the question is delivered IN-BAND: when the agent calls
 ask_user_line, the question spec is the `function_call` item's `arguments` in
 the response the LINE backend (line-crm worker) reads. The backend renders it
-as a LINE text message with native quick-reply chips. No webhook, no spool,
+natively: a confirm/buttons template (confirm, choice with <=4 options) or a
+text message with quick-reply chips (choice with 5-13). No webhook, no spool,
 no backend round-trip to receive it.
 
     agent calls ask_user_line(message=..., kind=..., options=[...])
       -> appears as a function_call (arguments = the question) in the response
       -> tool returns a stop sentinel -> model ends its turn (status: completed)
-         ... backend renders quick-reply chips, user taps one ...
+         ... backend renders template buttons / chips, user taps one ...
       -> the tapped label arrives as a NORMAL text webhook event
       -> backend POSTs it as the next `input` with previous_response_id
       -> agent resumes
 
-Because chips use `type: "message"` actions, the resume leg needs zero new
-code — the tapped label is delivered as ordinary typed text.
+Because buttons and chips all use `type: "message"` actions, the resume leg
+needs zero new code — the tapped label is delivered as ordinary typed text.
 
 Registers:
   * tool  `ask_user_line`   — the model calls this to ask ONE question
@@ -43,7 +44,7 @@ def register(ctx):
         handler=handle_ask_user_line,
         description=(
             "Pause and ask the LINE user ONE question "
-            "(renders as quick-reply chips). Ends your turn."
+            "(renders as tappable buttons or chips). Ends your turn."
         ),
     )
 

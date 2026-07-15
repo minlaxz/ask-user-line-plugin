@@ -2,8 +2,9 @@
 
 The question the model builds is delivered IN-BAND: it appears as the
 `function_call` item's `arguments` in the response the LINE backend reads
-(line-crm worker), which renders it as a LINE quick-reply message. So this
-handler does NOT deliver anything out-of-band. It only:
+(line-crm worker), which renders it natively — confirm/buttons template or
+quick-reply chips, depending on kind and option count. So this handler does
+NOT deliver anything out-of-band. It only:
 
   1. validates the question the model produced (so a malformed call can be
      retried — the error is returned as the tool result, never raised), and
@@ -32,8 +33,8 @@ _MAX_LABEL_CHARS = 20
 _STOP_INSTRUCTION = (
     "The question has been presented to the LINE user. STOP NOW: end your turn "
     "and output nothing further. Do NOT guess or fabricate the user's answer. "
-    "The conversation resumes automatically when the user taps a quick-reply "
-    "chip or types a reply."
+    "The conversation resumes automatically when the user taps a button/chip "
+    "or types a reply."
 )
 
 
@@ -79,7 +80,7 @@ def _validate_ask(args):
                     "(hard LINE limit)"
                 )
     elif options is not None:
-        # confirm renders fixed Yes/No chips; freetext renders no chips.
+        # confirm renders fixed Yes/No buttons; freetext renders no buttons.
         # `is not None` (not truthiness): an empty list is still "present".
         errors.append(f"kind '{kind}' must not include 'options'")
 

@@ -1,7 +1,8 @@
 # ask-user-line
 
 A Hermes plugin that lets the agent **pause mid-task and ask the LINE user ONE
-question**, rendered as native **LINE quick-reply chips**, for the LINE-dedicated
+question**, rendered natively in LINE (**confirm/buttons templates or
+quick-reply chips**, by kind), for the LINE-dedicated
 Hermes instance behind the OpenAI **Responses** API (`/v1/responses`). The API
 server ships a restricted toolset that drops the built-in interactive tools
 (`clarify`, `send_message`); this plugin restores that capability in a form the
@@ -16,14 +17,14 @@ file, no backend round-trip is needed to receive the question.**
 LINE user message → webhook → maybeSendOpenAIAutoReply → POST /responses
 Hermes calls ask_user_line({message, kind, options}) → stop sentinel → turn ends
 backend scans response.output for function_call name === "ask_user_line"
-  → builds LINE text message with quickReply chips → replyMessage / pushMessage
-user taps a chip (message action) → arrives as a NORMAL text webhook event
+  → builds a confirm/buttons template or quickReply chips → replyMessage / pushMessage
+user taps a button/chip (message action) → arrives as a NORMAL text webhook event
   → existing flow sends it as next `input` + previous_response_id → agent resumes
 ```
 
-**Key insight:** the resume leg needs zero new code. Chips use `type: "message"`
-actions, so the tapped label is delivered as ordinary typed text and flows into
-the existing `previous_response_id` session chain.
+**Key insight:** the resume leg needs zero new code. Template buttons and chips
+all use `type: "message"` actions, so the tapped label is delivered as ordinary
+typed text and flows into the existing `previous_response_id` session chain.
 
 > Deliberately NARROWER than [ask-user-form](../ask-user-form-plugin/): LINE
 > quick replies cannot render multi-field forms. **One question per call.** If
@@ -92,11 +93,11 @@ arrives as the `function_call.arguments`:
 
 ### `kind` semantics
 
-| kind | `options` | Rendered as |
-|------|-----------|-------------|
-| `choice` | **required**, 2–13 items, each ≤ 20 chars after trim, no duplicates | question text + one quick-reply chip per option |
-| `confirm` | must be absent (`{"error": …}` if present) | question text + fixed **Yes** / **No** chips (labels hardcoded for v1; localize later via plugin config) |
-| `freetext` | must be absent | plain text question, no chips — user types the answer |
+| kind | `options` | Rendered as (by the line-crm worker) |
+|------|-----------|--------------------------------------|
+| `choice` | **required**, 2–13 items, each ≤ 20 chars after trim, no duplicates | 2–4 options → **Buttons template** (persistent buttons under the question); 5–13 → quick-reply chips |
+| `confirm` | must be absent (`{"error": …}` if present) | **Confirm template** with fixed **Yes** / **No** buttons (labels hardcoded for v1; localize later via plugin config) |
+| `freetext` | must be absent | plain text question, no buttons — user types the answer |
 
 Validation failures are returned as `{"error": "..."}` (never raised) so the
 model can fix the call and retry. The backend re-validates everything
@@ -105,11 +106,17 @@ server-side anyway — it never trusts model output.
 ### Hard LINE limits (why the schema is shaped this way)
 
 - Max **13** quick-reply items per message.
-- Each chip label max **20** characters.
+- Each action label (chip or template button) max **20** characters.
+- Buttons template max **4** actions — that's why choice with 5+ options falls
+  back to quick-reply chips.
+- Template text is clamped by the worker (confirm 240 / buttons 160 chars,
+  altText 400); a longer question is delivered in full as a preceding text
+  message with a truncated stub in the template.
 - `quickReply` is only honored on the **last** message of a send — the backend
   places the question last when narration text is also present.
-- Chips are **ephemeral**: if the user types something else instead of tapping,
-  that text flows into the chain as the answer. Acceptable by design.
+- Chips are **ephemeral**; template buttons persist in chat history. Either
+  way, if the user types something else instead of tapping, that text flows
+  into the chain as the answer. Acceptable by design.
 
 ## Reading the ask from a Responses stream
 
@@ -123,7 +130,7 @@ The `ask_user_line` call is a `function_call` item; its `arguments` is a JSON
 ```
 
 1. Find the `function_call` whose `name === "ask_user_line"`.
-2. `const ask = JSON.parse(item.arguments)` → render `ask.message` (+ chips).
+2. `const ask = JSON.parse(item.arguments)` → render `ask.message` (+ buttons/chips).
 3. Keep the response `id` (`resp_…`) for the resume call.
 
 The turn ends with `response.completed` / `status: "completed"`. The assistant
@@ -136,7 +143,7 @@ last message).
 
 ## Resuming
 
-The tapped chip arrives as a normal text webhook event. The existing backend
+The tapped button/chip arrives as a normal text webhook event. The existing backend
 flow sends the label as the next `input` with `previous_response_id` — no
 prefix, no JSON envelope; the plugin asks single flat questions, so plain text
 answers are fine:
@@ -183,5 +190,6 @@ once you've confirmed the block contract for your Hermes version.
   webhook and no spool.
 - Reply tokens are single-use with ~1 min expiry — the backend's existing
   `pushMessage` fallback covers expiry.
-- Flex-message rendering of choices is out of scope for v1 (quick replies only).
+- Confirm and small-choice asks render as LINE **template messages** (worker-side,
+  devs-nimm/line-crm#33); Flex-message rendering remains out of scope.
 - Pure standard library — zero third-party dependencies.

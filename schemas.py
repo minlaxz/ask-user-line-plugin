@@ -1,16 +1,18 @@
 """Schema for the ask_user_line tool — this is what the LLM sees and fills in.
 
-Deliberately NARROWER than the ask-user-form plugin: LINE quick replies cannot
+Deliberately NARROWER than the ask-user-form plugin: LINE messages cannot
 render multi-field forms, so this tool asks exactly ONE question per call.
 The hard limits baked into the schema mirror the LINE Messaging API:
-max 13 quick-reply items, each label at most 20 characters.
+max 13 quick-reply items, each label at most 20 characters. (Rendering is the
+worker's concern: confirm/buttons templates for confirm and choice<=4,
+quick-reply chips for choice 5-13.)
 """
 
 ASK_USER_LINE_SCHEMA = {
     "name": "ask_user_line",
     "description": (
-        "Pause and ask the LINE user ONE question. Rendered as native LINE "
-        "quick-reply chips. Calling this ENDS YOUR TURN — output nothing "
+        "Pause and ask the LINE user ONE question. Rendered natively in LINE "
+        "as tappable buttons or chips. Calling this ENDS YOUR TURN — output nothing "
         "further, never fabricate the answer. If you need several answers, "
         "ask them one at a time across turns."
     ),
