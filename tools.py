@@ -87,6 +87,79 @@ def _validate_ask(args):
     return errors
 
 
+# LINE Flex hard limits (re-enforced server-side by the backend).
+_FLEX_MAX_ALT_TEXT_CHARS = 400
+_FLEX_CAROUSEL_MAX_BUBBLES = 12
+_FLEX_MAX_JSON_BYTES = 50 * 1024
+
+
+def _validate_flex(args):
+    """Return a list of human-readable problems with the flex call (empty = valid)."""
+    errors = []
+
+    alt_text = args.get("alt_text")
+    if not isinstance(alt_text, str) or not alt_text.strip():
+        errors.append("'alt_text' must be a non-empty string")
+    elif len(alt_text.strip()) > _FLEX_MAX_ALT_TEXT_CHARS:
+        errors.append(f"'alt_text' exceeds {_FLEX_MAX_ALT_TEXT_CHARS} chars (hard LINE limit)")
+
+    contents = args.get("contents")
+    if not isinstance(contents, dict):
+        errors.append("'contents' must be a Flex container object")
+        return errors
+
+    ctype = contents.get("type")
+    if ctype == "carousel":
+        bubbles = contents.get("contents")
+        if not isinstance(bubbles, list) or not bubbles:
+            errors.append("carousel requires a non-empty 'contents' array of bubbles")
+        else:
+            if len(bubbles) > _FLEX_CAROUSEL_MAX_BUBBLES:
+                errors.append(
+                    f"carousel allows at most {_FLEX_CAROUSEL_MAX_BUBBLES} bubbles "
+                    "(hard LINE limit)"
+                )
+            for i, bubble in enumerate(bubbles):
+                if not isinstance(bubble, dict) or bubble.get("type") != "bubble":
+                    errors.append(f"carousel contents[{i}] must be a bubble object")
+    elif ctype != "bubble":
+        errors.append(f"contents.type must be 'bubble' or 'carousel', got {ctype!r}")
+
+    try:
+        serialized = json.dumps(contents, ensure_ascii=False).encode("utf-8")
+        if len(serialized) > _FLEX_MAX_JSON_BYTES:
+            errors.append("contents JSON exceeds 50KB (hard LINE limit)")
+    except (TypeError, ValueError) as e:
+        errors.append(f"'contents' is not JSON serializable: {e}")
+
+    return errors
+
+
+def handle_send_line_flex(args, **kwargs):
+    # Never raise, even on a non-dict payload (never trust model output).
+    args = args if isinstance(args, dict) else {}
+
+    errors = _validate_flex(args)
+    if errors:
+        # Actionable error so the model can fix the call and retry.
+        return json.dumps({"error": "invalid flex message: " + "; ".join(errors)})
+
+    contents = args.get("contents", {})
+    logger.info(
+        "send_line_flex queued (type=%s): %s",
+        contents.get("type"),
+        args.get("alt_text"),
+    )
+
+    # Delivery is IN-BAND: the backend renders from this function_call's
+    # `arguments` when the turn ends. Non-terminal — the model may add
+    # narration text or an ask_user_line call in the same turn.
+    return json.dumps({
+        "status": "queued",
+        "note": "Flex message will be delivered to the LINE user when your turn ends.",
+    })
+
+
 def handle_ask_user_line(args, **kwargs):
     # Never raise, even on a non-dict payload (never trust model output).
     args = args if isinstance(args, dict) else {}

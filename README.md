@@ -30,6 +30,23 @@ typed text and flows into the existing `previous_response_id` session chain.
 > quick replies cannot render multi-field forms. **One question per call.** If
 > the agent needs several answers, it asks them one at a time across turns.
 
+## send_line_flex (Flex Message / Flex Carousel)
+
+The plugin also registers `send_line_flex`, which lets the agent send rich
+**Flex Messages** (one bubble) and **Flex Carousels** (`type: "carousel"`,
+1–12 bubbles). Same in-band delivery: each call appears as a `function_call`
+item whose `arguments` is `{alt_text, contents}`; the backend collects every
+valid call **in order** and sends them as `type: "flex"` messages. Unlike
+`ask_user_line` it is **non-terminal** — the model may combine narration text,
+several flex calls, and one ask in a single turn. The backend orders the send
+as: narration text → flex messages → ask question (always last), clamped to
+LINE's 5-messages-per-send cap (excess flex is dropped, never the ask).
+
+Hard LINE limits enforced plugin-side and re-clamped by the backend:
+`alt_text` ≤ 400 chars (backend falls back to the first text node in
+`contents` if missing), carousel ≤ 12 bubbles (backend truncates), container
+JSON ≤ 50KB (backend drops the call).
+
 ## Files
 
 | File | Runs in | Purpose |
