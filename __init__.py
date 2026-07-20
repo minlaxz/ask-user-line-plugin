@@ -29,8 +29,8 @@ See README.md for the full backend contract.
 
 import logging
 
-from .schemas import ASK_USER_LINE_SCHEMA
-from .tools import handle_ask_user_line
+from .schemas import ASK_USER_LINE_SCHEMA, SEND_LINE_FLEX_SCHEMA
+from .tools import handle_ask_user_line, handle_send_line_flex
 
 logger = logging.getLogger("ask_user_line")
 
@@ -45,6 +45,21 @@ def register(ctx):
         description=(
             "Pause and ask the LINE user ONE question "
             "(renders as tappable buttons or chips). Ends your turn."
+        ),
+    )
+
+    # --- Tool: send_line_flex --------------------------------------------------
+    # Same in-band delivery as ask_user_line, but NON-terminal: the backend
+    # renders every valid send_line_flex function_call in the response output
+    # (bubble or carousel), in order, before any ask_user_line question.
+    ctx.register_tool(
+        name="send_line_flex",
+        toolset="ask_user_line",
+        schema=SEND_LINE_FLEX_SCHEMA,
+        handler=handle_send_line_flex,
+        description=(
+            "Send a rich LINE Flex Message card or carousel to the user "
+            "(delivered when your turn ends)."
         ),
     )
 
