@@ -125,8 +125,12 @@ def _validate_flex(args):
     elif ctype != "bubble":
         errors.append(f"contents.type must be 'bubble' or 'carousel', got {ctype!r}")
 
-    if len(json.dumps(contents, ensure_ascii=False).encode()) > _FLEX_MAX_JSON_BYTES:
-        errors.append("contents JSON exceeds 50KB (hard LINE limit)")
+    try:
+        serialized = json.dumps(contents, ensure_ascii=False).encode("utf-8")
+        if len(serialized) > _FLEX_MAX_JSON_BYTES:
+            errors.append("contents JSON exceeds 50KB (hard LINE limit)")
+    except (TypeError, ValueError) as e:
+        errors.append(f"'contents' is not JSON serializable: {e}")
 
     return errors
 
